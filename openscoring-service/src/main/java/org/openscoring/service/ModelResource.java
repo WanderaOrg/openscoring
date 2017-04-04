@@ -26,7 +26,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.net.URI;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -52,22 +51,13 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
-import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.StreamingOutput;
-import javax.ws.rs.core.UriBuilder;
-import javax.ws.rs.core.UriInfo;
 import javax.xml.bind.JAXBException;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Metric;
-import com.codahale.metrics.MetricFilter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
 import org.dmg.pmml.FieldName;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.jpmml.evaluator.EvaluationException;
@@ -88,12 +78,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.supercsv.prefs.CsvPreference;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Metric;
+import com.codahale.metrics.MetricFilter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ListMultimap;
+
 @Path("model")
 @PermitAll
 public class ModelResource {
-
-	@Context
-	private UriInfo uriInfo = null;
 
 	private ModelRegistry modelRegistry = null;
 
@@ -205,11 +200,7 @@ public class ModelResource {
 		} else
 
 		{
-			UriBuilder uriBuilder = (this.uriInfo.getBaseUriBuilder()).path(ModelResource.class).path(id);
-
-			URI uri = uriBuilder.build();
-
-			return (Response.created(uri).entity(entity)).build();
+			return (Response.status(Status.CREATED).entity(entity)).build();
 		}
 	}
 
