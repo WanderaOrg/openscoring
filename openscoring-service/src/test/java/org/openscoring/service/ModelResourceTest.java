@@ -18,11 +18,13 @@
  */
 package org.openscoring.service;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 
@@ -31,7 +33,6 @@ import javax.ws.rs.core.Application;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
-import com.google.common.collect.Maps;
 import org.dmg.pmml.FieldName;
 import org.glassfish.jersey.client.ClientConfig;
 import org.glassfish.jersey.media.multipart.FormDataBodyPart;
@@ -47,8 +48,7 @@ import org.openscoring.common.ModelResponse;
 import org.openscoring.common.SimpleResponse;
 import org.supercsv.prefs.CsvPreference;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import com.google.common.collect.Maps;
 
 public class ModelResourceTest extends JerseyTest {
 
@@ -166,10 +166,6 @@ public class ModelResourceTest extends JerseyTest {
 		}
 
 		assertEquals(201, response.getStatus());
-
-		URI location = response.getLocation();
-
-		assertEquals("/model/" + id, location.getPath());
 
 		return response.readEntity(ModelResponse.class);
 	}
