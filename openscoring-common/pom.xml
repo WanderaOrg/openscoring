@@ -10,7 +10,6 @@
 
 	<groupId>org.openscoring</groupId>
 	<artifactId>openscoring-common</artifactId>
-	<version>1.3-WND-2-SNAPSHOT</version>
 	<packaging>jar</packaging>
 
 	<name>Openscoring Common</name>
