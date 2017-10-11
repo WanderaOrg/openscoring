@@ -5,11 +5,12 @@
 	<parent>
 		<groupId>org.openscoring</groupId>
 		<artifactId>openscoring</artifactId>
-		<version>1.3-WND-1-SNAPSHOT</version>
+		<version>1.3-WND-2-SNAPSHOT</version>
 	</parent>
 
 	<groupId>org.openscoring</groupId>
 	<artifactId>openscoring-service</artifactId>
+	<version>1.3-WND-2-SNAPSHOT</version>
 
 	<name>Openscoring Service</name>
 	<description>RESTful Web service</description>
@@ -26,6 +27,7 @@
 		<dependency>
 			<groupId>org.openscoring</groupId>
 			<artifactId>openscoring-common</artifactId>
+			<version>1.3-WND-2-SNAPSHOT</version>
 		</dependency>
 
 		<dependency>
