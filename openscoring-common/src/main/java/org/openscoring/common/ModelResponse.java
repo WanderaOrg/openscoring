@@ -24,12 +24,15 @@ import java.util.Map;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
+
 import org.dmg.pmml.MiningFunction;
 
 @JsonInclude (
 	value = JsonInclude.Include.NON_EMPTY
 )
 public class ModelResponse extends SimpleResponse {
+
+	private static final long serialVersionUID = 3969189785024779794L;
 
 	private String id = null;
 
@@ -41,6 +44,7 @@ public class ModelResponse extends SimpleResponse {
 
 	private Map<String, List<Field>> schema = null;
 
+	private ModelHeader modelHeader = null;
 
 	public ModelResponse(){
 	}
@@ -61,7 +65,8 @@ public class ModelResponse extends SimpleResponse {
 			.add("miningFunction", getMiningFunction())
 			.add("summary", getSummary())
 			.add("properties", getProperties())
-			.add("schema", getSchema());
+			.add("schema", getSchema())
+			.add("modelHeader", getModelHeader());
 
 		return stringHelper.toString();
 	}
@@ -104,5 +109,13 @@ public class ModelResponse extends SimpleResponse {
 
 	public void setSchema(Map<String, List<Field>> schema){
 		this.schema = schema;
+	}
+
+	public ModelHeader getModelHeader() {
+		return modelHeader;
+	}
+
+	public void setModelHeader(ModelHeader modelHeader) {
+		this.modelHeader = modelHeader;
 	}
 }

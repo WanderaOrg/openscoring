@@ -72,6 +72,7 @@ import org.openscoring.common.BatchEvaluationResponse;
 import org.openscoring.common.BatchModelResponse;
 import org.openscoring.common.EvaluationRequest;
 import org.openscoring.common.EvaluationResponse;
+import org.openscoring.common.ModelHeader;
 import org.openscoring.common.ModelResponse;
 import org.openscoring.common.SimpleResponse;
 import org.slf4j.Logger;
@@ -592,6 +593,7 @@ public class ModelResource {
 		response.setMiningFunction(model.getMiningFunction());
 		response.setSummary(model.getSummary());
 		response.setProperties(model.getProperties());
+		response.setModelHeader(new ModelHeader(model.getEvaluator().getPMML().getHeader()));
 
 		if(expand){
 			response.setSchema(model.getSchema());

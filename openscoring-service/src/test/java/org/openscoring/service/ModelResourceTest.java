@@ -44,6 +44,7 @@ import org.openscoring.common.BatchEvaluationRequest;
 import org.openscoring.common.BatchEvaluationResponse;
 import org.openscoring.common.EvaluationRequest;
 import org.openscoring.common.EvaluationResponse;
+import org.openscoring.common.ModelHeader;
 import org.openscoring.common.ModelResponse;
 import org.openscoring.common.SimpleResponse;
 import org.supercsv.prefs.CsvPreference;
@@ -73,7 +74,14 @@ public class ModelResourceTest extends JerseyTest {
 
 		assertEquals("Iris", extractSuffix(id));
 
-		deploy(id);
+		ModelHeader expectedHeader = new ModelHeader();
+		expectedHeader.setCopyright("Copyright (c) 2014 vfed");
+		expectedHeader.setDescription("RPart Decision Tree Model");
+		expectedHeader.setApplicationName("Rattle/PMML");
+		expectedHeader.setApplicationVersion("1.4");
+		expectedHeader.setTimestamp("2014-07-06 23:51:05");
+
+		validateModelHeaders(deploy(id), expectedHeader);
 
 		download(id);
 
@@ -111,7 +119,7 @@ public class ModelResourceTest extends JerseyTest {
 
 		assertEquals("Shopping", extractSuffix(id));
 
-		deployForm(id);
+		validateModelHeaders(deployForm(id), new ModelHeader());
 
 		List<EvaluationRequest> records = loadRecords(id);
 
@@ -168,6 +176,10 @@ public class ModelResourceTest extends JerseyTest {
 		assertEquals(201, response.getStatus());
 
 		return response.readEntity(ModelResponse.class);
+	}
+
+	private void validateModelHeaders(ModelResponse model, ModelHeader header) {
+		assertEquals(model.getModelHeader(), header);
 	}
 
 	private Response download(String id){

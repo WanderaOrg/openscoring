@@ -24,8 +24,10 @@ import javax.ws.rs.ext.ContextResolver;
 import javax.ws.rs.ext.Provider;
 
 import com.codahale.metrics.json.MetricsModule;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+
 import org.openscoring.common.OpenscoringModule;
 
 @Provider
@@ -33,13 +35,13 @@ public class ObjectMapperProvider implements ContextResolver<ObjectMapper> {
 
 	private ObjectMapper mapper = null;
 
-
 	public ObjectMapperProvider(){
 		ObjectMapper mapper = new ObjectMapper();
 		mapper.registerModule(new OpenscoringModule());
 		mapper.registerModule(new MetricsModule(TimeUnit.SECONDS, TimeUnit.SECONDS, false));
 		mapper.enable(SerializationFeature.INDENT_OUTPUT);
 		mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+		mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
 		setMapper(mapper);
 	}
