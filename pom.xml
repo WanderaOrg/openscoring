@@ -52,6 +52,17 @@
 		<url>https://github.com/jpmml/openscoring/issues</url>
 	</issueManagement>
 
+	<distributionManagement>
+		<repository>
+			<id>artifactory-release</id>
+			<url>https://artifactory.oss.wandera.net/artifactory/libs-release-local</url>
+		</repository>
+		<snapshotRepository>
+			<id>artifactory-snapshot</id>
+			<url>https://artifactory.oss.wandera.net/artifactory/libs-snapshot-local</url>
+		</snapshotRepository>
+	</distributionManagement>
+
 	<dependencyManagement>
 		<dependencies>
 			<dependency>
