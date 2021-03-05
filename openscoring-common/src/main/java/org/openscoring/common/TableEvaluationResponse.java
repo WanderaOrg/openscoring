@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Villu Ruusmann
+ * Copyright (c) 2019 Villu Ruusmann
  *
  * This file is part of Openscoring
  *
@@ -20,34 +20,72 @@ package org.openscoring.common;
 
 import java.util.List;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.jpmml.model.ToStringHelper;
 
 @JsonInclude (
 	value = JsonInclude.Include.NON_EMPTY
 )
-@JsonIgnoreProperties(ignoreUnknown = true)
-public class BatchModelResponse extends SimpleResponse implements BatchResponse<ModelResponse> {
+public class TableEvaluationResponse extends SimpleResponse implements BatchResponse<EvaluationResponse> {
 
-	private List<ModelResponse> responses = null;
+	private TableFormat format = null;
+
+	private List<String> columns = null;
+
+	private List<EvaluationResponse> responses = null;
 
 
-	public BatchModelResponse(){
+	public TableEvaluationResponse(){
+	}
+
+	public String getIdColumn(){
+		List<String> columns = getColumns();
+
+		if(columns != null && columns.size() > 0){
+			String column = columns.get(0);
+
+			if(("id").equalsIgnoreCase(column)){
+				return column;
+			}
+		}
+
+		return null;
 	}
 
 	@Override
 	protected ToStringHelper toStringHelper(){
 		return super.toStringHelper()
+			.add("format", getFormat())
+			.add("columns", getColumns())
 			.add("responses", getResponses());
 	}
 
+	public TableFormat getFormat(){
+		return this.format;
+	}
+
+	public TableEvaluationResponse setFormat(TableFormat format){
+		this.format = format;
+
+		return this;
+	}
+
+	public List<String> getColumns(){
+		return this.columns;
+	}
+
+	public TableEvaluationResponse setColumns(List<String> columns){
+		this.columns = columns;
+
+		return this;
+	}
+
 	@Override
-	public List<ModelResponse> getResponses(){
+	public List<EvaluationResponse> getResponses(){
 		return this.responses;
 	}
 
-	public BatchModelResponse setResponses(List<ModelResponse> responses){
+	public TableEvaluationResponse setResponses(List<EvaluationResponse> responses){
 		this.responses = responses;
 
 		return this;

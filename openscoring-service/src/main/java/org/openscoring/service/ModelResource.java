@@ -18,15 +18,8 @@
  */
 package org.openscoring.service;
 
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.nio.charset.Charset;
+import java.net.URI;
+import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -35,14 +28,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.annotation.security.PermitAll;
 import javax.annotation.security.RolesAllowed;
 import javax.inject.Inject;
 import javax.ws.rs.BadRequestException;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
-import javax.ws.rs.HeaderParam;
 import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.POST;
@@ -50,14 +41,13 @@ import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
-import javax.ws.rs.QueryParam;
-import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
-import javax.ws.rs.core.Response.Status;
-import javax.ws.rs.core.StreamingOutput;
-import javax.xml.bind.JAXBException;
+import javax.ws.rs.core.SecurityContext;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ListMultimap;
 import org.dmg.pmml.FieldName;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.jpmml.evaluator.EvaluationException;
@@ -65,8 +55,8 @@ import org.jpmml.evaluator.Evaluator;
 import org.jpmml.evaluator.EvaluatorUtil;
 import org.jpmml.evaluator.FieldValue;
 import org.jpmml.evaluator.HasGroupFields;
+import org.jpmml.evaluator.HasPMML;
 import org.jpmml.evaluator.InputField;
-import org.jpmml.evaluator.ModelEvaluator;
 import org.openscoring.common.BatchEvaluationRequest;
 import org.openscoring.common.BatchEvaluationResponse;
 import org.openscoring.common.BatchModelResponse;
@@ -75,41 +65,40 @@ import org.openscoring.common.EvaluationResponse;
 import org.openscoring.common.ModelHeader;
 import org.openscoring.common.ModelResponse;
 import org.openscoring.common.SimpleResponse;
+import org.openscoring.common.TableEvaluationRequest;
+import org.openscoring.common.TableEvaluationResponse;
+import org.openscoring.service.annotations.Endpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.supercsv.prefs.CsvPreference;
-
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Metric;
-import com.codahale.metrics.MetricFilter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
 
 @Path("model")
-@PermitAll
+@Consumes(MediaType.APPLICATION_JSON)
+@Produces(MediaType.APPLICATION_JSON)
+@RolesAllowed (
+	value = {Roles.USER, Roles.ADMIN}
+)
 public class ModelResource {
 
 	private ModelRegistry modelRegistry = null;
 
-	private MetricRegistry metricRegistry = null;
-
 
 	@Inject
-	public ModelResource(ModelRegistry modelRegistry, MetricRegistry metricRegistry){
+	public ModelResource(ModelRegistry modelRegistry){
 		this.modelRegistry = modelRegistry;
-		this.metricRegistry = metricRegistry;
 	}
 
 	@GET
-	@Produces(MediaType.APPLICATION_JSON)
-	public BatchModelResponse queryBatch(){
-		BatchModelResponse batchResponse = new BatchModelResponse();
+	@Endpoint (
+		family = Endpoint.Family.INFORMATION
+	)
+	public BatchModelResponse queryBatch(@Context SecurityContext securityContext){
+		Principal owner = securityContext.getUserPrincipal();
 
 		List<ModelResponse> responses = new ArrayList<>();
 
-		Collection<Map.Entry<String, Model>> entries = this.modelRegistry.entries();
+		Map<String, Model> models = this.modelRegistry.getModels(owner);
+
+		Collection<Map.Entry<String, Model>> entries = models.entrySet();
 		for(Map.Entry<String, Model> entry : entries){
 			ModelResponse response = createModelResponse(entry.getKey(), entry.getValue(), false);
 
@@ -125,268 +114,199 @@ public class ModelResource {
 		};
 		Collections.sort(responses, comparator);
 
-		batchResponse.setResponses(responses);
+		BatchModelResponse batchResponse = new BatchModelResponse()
+			.setResponses(responses);
 
 		return batchResponse;
 	}
 
 	@GET
-	@Path("{id:" + ModelRegistry.ID_REGEX + "}")
-	@Produces(MediaType.APPLICATION_JSON)
-	public ModelResponse query(@PathParam("id") String id){
-		Model model = this.modelRegistry.get(id);
+	@Path(ModelRef.PATH_VALUE_ID)
+	@Endpoint (
+		family = Endpoint.Family.INFORMATION
+	)
+	public ModelResponse query(@PathParam("id") ModelRef modelRef){
+		Model model = this.modelRegistry.get(modelRef);
 		if(model == null){
-			throw new NotFoundException("Model \"" + id + "\" not found");
+			logger.error("Not found");
+
+			throw new NotFoundException();
 		}
 
-		return createModelResponse(id, model, true);
+		return createModelResponse(modelRef.getId(), model, true);
 	}
 
 	@PUT
-	@Path("{id:" + ModelRegistry.ID_REGEX + "}")
-	@RolesAllowed (
-		value = {"admin"}
-	)
+	@Path(ModelRef.PATH_VALUE_ID)
 	@Consumes({MediaType.APPLICATION_XML, MediaType.TEXT_XML})
-	@Produces(MediaType.APPLICATION_JSON)
-	public Response deploy(@PathParam("id") String id, InputStream is){
-		return doDeploy(id, is);
-	}
-
-	@POST
 	@RolesAllowed (
-		value = {"admin"}
+		value = {Roles.ADMIN}
 	)
-	@Consumes(MediaType.MULTIPART_FORM_DATA)
-	@Produces(MediaType.APPLICATION_JSON)
-	public Response deployForm(@FormDataParam("id") String id, @FormDataParam("pmml") InputStream is){
-
-		if(!ModelRegistry.validateId(id)){
-			throw new BadRequestException("Invalid identifier");
-		}
-
-		return doDeploy(id, is);
+	@Endpoint (
+		family = Endpoint.Family.MANAGEMENT
+	)
+	public Response deploy(@PathParam("id") ModelRef modelRef, Model model){
+		return doDeploy(modelRef, model);
 	}
 
-	private Response doDeploy(String id, InputStream is){
-		Model model;
+	@PUT
+	@Path(ModelRef.PATH_VALUE_ID)
+	@Consumes(MediaType.MULTIPART_FORM_DATA)
+	@RolesAllowed (
+		value = {Roles.ADMIN}
+	)
+	@Endpoint (
+		family = Endpoint.Family.MANAGEMENT
+	)
+	public Response deployForm(@PathParam("id") ModelRef modelRef, @FormDataParam("pmml") Model model){
+		return doDeploy(modelRef, model);
+	}
 
-		try {
-			model = this.modelRegistry.load(is);
-		} catch(Exception e){
-			logger.error("Failed to load PMML document", e);
-
-			throw new BadRequestException(e);
-		}
-
+	private Response doDeploy(ModelRef modelRef, Model model){
 		boolean success;
 
-		Model oldModel = this.modelRegistry.get(id);
+		Model oldModel = this.modelRegistry.get(modelRef);
 		if(oldModel != null){
-			success = this.modelRegistry.replace(id, oldModel, model);
+			success = this.modelRegistry.replace(modelRef, oldModel, model);
 		} else
 
 		{
-			success = this.modelRegistry.put(id, model);
+			success = this.modelRegistry.put(modelRef, model);
 		} // End if
 
 		if(!success){
-			throw new InternalServerErrorException("Concurrent modification");
+			logger.error("Concurrent modification");
+
+			throw new InternalServerErrorException();
 		}
 
-		ModelResponse entity = createModelResponse(id, model, false);
+		ModelResponse entity = createModelResponse(modelRef.getId(), model, true);
 
 		if(oldModel != null){
-			return (Response.ok().entity(entity)).build();
-		} else
-
-		{
-			return (Response.status(Status.CREATED).entity(entity)).build();
+			return (Response.status(Response.Status.CREATED).entity(entity)).build();
 		}
+
+		return (Response.status(Response.Status.CREATED).entity(entity)).build();
 	}
 
 	@GET
-	@Path("{id:" + ModelRegistry.ID_REGEX + "}/pmml")
+	@Path(ModelRef.PATH_VALUE_ID + "/pmml")
+	@Produces(MediaType.APPLICATION_XML)
 	@RolesAllowed (
-		value = {"admin"}
+		value = {Roles.ADMIN}
 	)
-	@Produces({MediaType.APPLICATION_JSON, MediaType.TEXT_XML})
-	public Response download(@PathParam("id") String id){
-		final
-		Model model = this.modelRegistry.get(id, true);
+	@Endpoint (
+		family = Endpoint.Family.MANAGEMENT
+	)
+	public Model download(@PathParam("id") ModelRef modelRef){
+		Model model = this.modelRegistry.get(modelRef, true);
 		if(model == null){
-			throw new NotFoundException("Model \"" + id + "\" not found");
+			logger.error("Not found");
+
+			throw new NotFoundException();
 		}
 
-		StreamingOutput entity = new StreamingOutput(){
-
-			@Override
-			public void write(OutputStream os) throws IOException {
-				BufferedOutputStream bufferedOs = new BufferedOutputStream(os){
-
-					@Override
-					public void close() throws IOException {
-						flush();
-
-						// The closing of the underlying java.io.OutputStream is handled elsewhere
-					}
-				};
-
-				try {
-					ModelResource.this.modelRegistry.store(model, bufferedOs);
-				} catch(JAXBException je){
-					throw new InternalServerErrorException(je);
-				} finally {
-					bufferedOs.close();
-				}
-			}
-		};
-
-		return (Response.ok().entity(entity))
-			.type(MediaType.APPLICATION_XML_TYPE.withCharset(ModelResource.CHARSET_UTF8.name()))
-			.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + id + ".pmml.xml") // XXX
-			.build();
+		return model;
 	}
 
 	@POST
-	@Path("{id:" + ModelRegistry.ID_REGEX + "}")
-	@Consumes(MediaType.APPLICATION_JSON)
-	@Produces(MediaType.APPLICATION_JSON)
-	public EvaluationResponse evaluate(@PathParam("id") String id, EvaluationRequest request){
+	@Path(ModelRef.PATH_VALUE_ID)
+	@Endpoint (
+		family = Endpoint.Family.EVALUATION
+	)
+	public EvaluationResponse evaluate(@PathParam("id") ModelRef modelRef, EvaluationRequest request){
 		List<EvaluationRequest> requests = Collections.singletonList(request);
 
-		List<EvaluationResponse> responses = doEvaluate(id, requests, true, "evaluate");
+		List<EvaluationResponse> responses = doEvaluate(modelRef, requests, true);
 
 		return responses.get(0);
 	}
 
 	@POST
-	@Path("{id: " + ModelRegistry.ID_REGEX + "}/batch")
-	@Consumes(MediaType.APPLICATION_JSON)
-	@Produces(MediaType.APPLICATION_JSON)
-	public BatchEvaluationResponse evaluateBatch(@PathParam("id") String id, BatchEvaluationRequest request){
-		BatchEvaluationResponse batchResponse = new BatchEvaluationResponse(request.getId());
+	@Path(ModelRef.PATH_VALUE_ID + "/batch")
+	@Endpoint (
+		family = Endpoint.Family.EVALUATION
+	)
+	public BatchEvaluationResponse evaluateBatch(@PathParam("id") ModelRef modelRef, BatchEvaluationRequest batchRequest){
+		List<EvaluationRequest> requests = batchRequest.getRequests();
 
-		List<EvaluationRequest> requests = request.getRequests();
+		List<EvaluationResponse> responses = doEvaluate(modelRef, requests, false);
 
-		List<EvaluationResponse> responses = doEvaluate(id, requests, false, "evaluate.batch");
-
-		batchResponse.setResponses(responses);
+		BatchEvaluationResponse batchResponse = new BatchEvaluationResponse(batchRequest.getId())
+			.setResponses(responses);
 
 		return batchResponse;
 	}
 
 	@POST
-	@Path("{id:" + ModelRegistry.ID_REGEX + "}/csv")
-	@Consumes(MediaType.TEXT_PLAIN)
-	@Produces({MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN})
-	public Response evaluateCsv(@PathParam("id") String id, @QueryParam("delimiterChar") String delimiterChar, @QueryParam("quoteChar") String quoteChar, @HeaderParam(HttpHeaders.CONTENT_TYPE) String contentType, InputStream is){
-		com.google.common.net.MediaType mediaType = com.google.common.net.MediaType.parse(contentType);
-
-		Charset charset = (mediaType.charset()).or(ModelResource.CHARSET_UTF8);
-
-		return doEvaluateCsv(id, delimiterChar, quoteChar, charset, is);
+	@Path(ModelRef.PATH_VALUE_ID + "/csv")
+	@Consumes({"application/csv", "text/csv", MediaType.TEXT_PLAIN})
+	@Produces(MediaType.TEXT_PLAIN)
+	@Endpoint (
+		family = Endpoint.Family.EVALUATION
+	)
+	public TableEvaluationResponse evaluateCsv(@PathParam("id") ModelRef modelRef, TableEvaluationRequest tableRequest){
+		return doEvaluateCsv(modelRef, tableRequest);
 	}
 
 	@POST
-	@Path("{id:" + ModelRegistry.ID_REGEX + "}/csv")
+	@Path(ModelRef.PATH_VALUE_ID + "/csv")
 	@Consumes(MediaType.MULTIPART_FORM_DATA)
-	@Produces({MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN})
-	public Response evaluateCsvForm(@PathParam("id") String id, @QueryParam("delimiterChar") String delimiterChar, @QueryParam("quoteChar") String quoteChar, @FormDataParam("csv") InputStream is){
-		Charset charset = ModelResource.CHARSET_UTF8;
-
-		return doEvaluateCsv(id, delimiterChar, quoteChar, charset, is);
+	@Produces(MediaType.TEXT_PLAIN)
+	@Endpoint (
+		family = Endpoint.Family.EVALUATION
+	)
+	public TableEvaluationResponse evaluateCsvForm(@PathParam("id") ModelRef modelRef, @FormDataParam("csv") TableEvaluationRequest tableRequest){
+		return doEvaluateCsv(modelRef, tableRequest);
 	}
 
-	private Response doEvaluateCsv(String id, String delimiterChar, String quoteChar, final Charset charset, InputStream is){
-		final
-		CsvPreference format;
+	private TableEvaluationResponse doEvaluateCsv(ModelRef modelRef, TableEvaluationRequest tableRequest){
+		List<EvaluationRequest> requests = tableRequest.getRequests();
 
-		final
-		CsvUtil.Table<EvaluationRequest> requestTable;
+		List<EvaluationResponse> responses = doEvaluate(modelRef, requests, true);
 
-		try {
-			BufferedReader reader = new BufferedReader(new InputStreamReader(is, charset)){
+		List<String> columns = new ArrayList<>();
 
-				@Override
-				public void close(){
-					// The closing of the underlying java.io.InputStream is handled elsewhere
-				}
-			};
-
-			try {
-				if(delimiterChar != null){
-					format = CsvUtil.getFormat(delimiterChar, quoteChar);
-				} else
-
-				{
-					format = CsvUtil.getFormat(reader);
-				}
-
-				requestTable = CsvUtil.readTable(reader, format);
-			} finally {
-				reader.close();
-			}
-		} catch(Exception e){
-			logger.error("Failed to load CSV document", e);
-
-			throw new BadRequestException(e);
+		String idColumn = tableRequest.getIdColumn();
+		if(idColumn != null){
+			columns.add(idColumn);
 		}
 
-		List<EvaluationRequest> requests = requestTable.getRows();
+		responses:
+		for(EvaluationResponse response : responses){
+			String message = response.getMessage();
 
-		List<EvaluationResponse> responses = doEvaluate(id, requests, true, "evaluate.csv");
-
-		final
-		CsvUtil.Table<EvaluationResponse> responseTable = new CsvUtil.Table<>();
-		responseTable.setId(requestTable.getId());
-		responseTable.setRows(responses);
-
-		StreamingOutput entity = new StreamingOutput(){
-
-			@Override
-			public void write(OutputStream os) throws IOException {
-				BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(os, charset)){
-
-					@Override
-					public void close() throws IOException {
-						flush();
-
-						// The closing of the underlying java.io.OutputStream is handled elsewhere
-					}
-				};
-
-				try {
-					CsvUtil.writeTable(writer, format, responseTable);
-				} finally {
-					writer.close();
-				}
+			if(message != null){
+				continue;
 			}
-		};
 
-		return (Response.ok().entity(entity))
-			.type(MediaType.TEXT_PLAIN_TYPE.withCharset(charset.name()))
-			.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + id + ".csv") // XXX
-			.build();
+			Map<String, ?> results = response.getResults();
+
+			columns.addAll(results.keySet());
+
+			break responses;
+		}
+
+		TableEvaluationResponse tableResponse = new TableEvaluationResponse()
+			.setFormat(tableRequest.getFormat())
+			.setColumns(columns)
+			.setResponses(responses);
+
+		return tableResponse;
 	}
 
-	@SuppressWarnings (
-		value = "resource"
-	)
-	private List<EvaluationResponse> doEvaluate(String id, List<EvaluationRequest> requests, boolean allOrNothing, String method){
-		Model model = this.modelRegistry.get(id, true);
+	private List<EvaluationResponse> doEvaluate(ModelRef modelRef, List<EvaluationRequest> requests, boolean allOrNothing){
+		Model model = this.modelRegistry.get(modelRef, true);
 		if(model == null){
-			throw new NotFoundException("Model \"" + id + "\" not found");
+			logger.error("Not found");
+
+			throw new NotFoundException();
 		}
 
 		List<EvaluationResponse> responses = new ArrayList<>();
 
-		Timer timer = this.metricRegistry.timer(createName(id, method));
-
-		Timer.Context context = timer.time();
-
 		try {
-			ModelEvaluator<?> evaluator = model.getEvaluator();
+			Evaluator evaluator = model.getEvaluator();
 
 			if(evaluator instanceof HasGroupFields){
 				HasGroupFields hasGroupFields = (HasGroupFields)evaluator;
@@ -426,58 +346,52 @@ public class ModelResource {
 			throw new BadRequestException(e);
 		}
 
-		context.stop();
-
-		Counter counter = this.metricRegistry.counter(createName(id, "records"));
-
-		counter.inc(responses.size());
-
 		return responses;
 	}
 
 	@DELETE
-	@Path("{id:" + ModelRegistry.ID_REGEX + "}")
+	@Path(ModelRef.PATH_VALUE_ID)
 	@RolesAllowed (
-		value = {"admin"}
+		value = {Roles.ADMIN}
 	)
-	@Produces(MediaType.APPLICATION_JSON)
-	public SimpleResponse undeploy(@PathParam("id") String id){
-		Model model = this.modelRegistry.get(id);
+	@Endpoint (
+		family = Endpoint.Family.MANAGEMENT
+	)
+	public SimpleResponse undeploy(@PathParam("id") ModelRef modelRef){
+		return doUndeploy(modelRef);
+	}
+
+	@DELETE
+	@Path(ModelRef.PATH_VALUE_ID)
+	@Consumes({MediaType.APPLICATION_FORM_URLENCODED, MediaType.MULTIPART_FORM_DATA})
+	@RolesAllowed (
+		value = {Roles.ADMIN}
+	)
+	@Endpoint (
+		family = Endpoint.Family.MANAGEMENT
+	)
+	public SimpleResponse undeployForm(@PathParam("id") ModelRef modelRef){
+		return doUndeploy(modelRef);
+	}
+
+	private SimpleResponse doUndeploy(ModelRef modelRef){
+		Model model = this.modelRegistry.get(modelRef);
 		if(model == null){
-			throw new NotFoundException("Model \"" + id + "\" not found");
+			logger.error("Not found");
+
+			throw new NotFoundException();
 		}
 
-		boolean success = this.modelRegistry.remove(id, model);
+		boolean success = this.modelRegistry.remove(modelRef, model);
 		if(!success){
-			throw new InternalServerErrorException("Concurrent modification");
+			logger.error("Concurrent modification");
+
+			throw new InternalServerErrorException();
 		}
-
-		final
-		String prefix = createNamePrefix(id);
-
-		MetricFilter filter = new MetricFilter(){
-
-			@Override
-			public boolean matches(String name, Metric metric){
-				return name.startsWith(prefix);
-			}
-		};
-
-		this.metricRegistry.removeMatching(filter);
 
 		SimpleResponse response = new SimpleResponse();
 
 		return response;
-	}
-
-	static
-	protected String createName(String... strings){
-		return MetricRegistry.name(ModelResource.class, strings);
-	}
-
-	static
-	protected String createNamePrefix(String... strings){
-		return createName(strings) + ".";
 	}
 
 	static
@@ -522,8 +436,8 @@ public class ModelResource {
 			// The value of the "group by" column is a single Object, not a Collection (ie. java.util.List) of Objects
 			arguments.put(key, entry.getKey());
 
-			EvaluationRequest resultRequest = new EvaluationRequest();
-			resultRequest.setArguments(arguments);
+			EvaluationRequest resultRequest = new EvaluationRequest()
+				.setArguments(arguments);
 
 			resultRequests.add(resultRequest);
 		}
@@ -553,21 +467,18 @@ public class ModelResource {
 				value = 0D;
 			}
 
-			FieldValue activeValue = activeField.prepare(value);
+			FieldValue inputValue = activeField.prepare(value);
 
-			arguments.put(activeName, activeValue);
+			arguments.put(activeName, inputValue);
 		}
 
 		logger.debug("Evaluation request {} has prepared arguments: {}", request.getId(), arguments);
 
-		Map<FieldName, ?> result = evaluator.evaluate(arguments);
+		Map<FieldName, ?> results = evaluator.evaluate(arguments);
 
-		// Jackson does not support the JSON serialization of <code>null</code> map keys
-		result = replaceNullKey(result);
+		logger.debug("Evaluation response {} has result: {}", response.getId(), results);
 
-		logger.debug("Evaluation response {} has result: {}", response.getId(), result);
-
-		response.setResult(EvaluatorUtil.decode(result));
+		response.setResults(EvaluatorUtil.decodeAll(results));
 
 		logger.info("Returned {}", response);
 
@@ -575,25 +486,16 @@ public class ModelResource {
 	}
 
 	static
-	private <V> Map<FieldName, V> replaceNullKey(Map<FieldName, V> map){
-
-		if(map.containsKey(null)){
-			Map<FieldName, V> result = new LinkedHashMap<>(map);
-			result.put(ModelResource.DEFAULT_NAME, result.remove(null));
-
-			return result;
-		}
-
-		return map;
-	}
-
-	static
 	private ModelResponse createModelResponse(String id, Model model, boolean expand){
-		ModelResponse response = new ModelResponse(id);
-		response.setMiningFunction(model.getMiningFunction());
-		response.setSummary(model.getSummary());
-		response.setProperties(model.getProperties());
-		response.setModelHeader(new ModelHeader(model.getEvaluator().getPMML().getHeader()));
+		ModelResponse response = new ModelResponse(id)
+			.setMiningFunction(model.getMiningFunction())
+			.setSummary(model.getSummary())
+			.setProperties(model.getProperties());
+
+		if (model.getEvaluator() instanceof HasPMML) {
+			HasPMML modelEvaluator = (HasPMML) model.getEvaluator();
+			response.setModelHeader(new ModelHeader(modelEvaluator.getPMML().getHeader()));
+		}
 
 		if(expand){
 			response.setSchema(model.getSchema());
@@ -601,10 +503,6 @@ public class ModelResource {
 
 		return response;
 	}
-
-	public static final FieldName DEFAULT_NAME = FieldName.create("_default");
-
-	private static final Charset CHARSET_UTF8 = Charset.forName("UTF-8");
 
 	private static final Logger logger = LoggerFactory.getLogger(ModelResource.class);
 }

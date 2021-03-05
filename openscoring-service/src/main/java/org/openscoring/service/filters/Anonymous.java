@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Villu Ruusmann
+ * Copyright (c) 2020 Villu Ruusmann
  *
  * This file is part of Openscoring
  *
@@ -16,33 +16,19 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with Openscoring.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.openscoring.service;
+package org.openscoring.service.filters;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.StringReader;
+import java.security.Principal;
 
-import org.junit.Test;
-import org.supercsv.prefs.CsvPreference;
+class Anonymous implements Principal {
 
-import static org.junit.Assert.assertNotSame;
-
-public class CsvUtilTest {
-
-	@Test
-	public void getFormat() throws IOException {
-		CsvPreference first;
-		CsvPreference second;
-
-		String csv = "1\tone\n" +
-			"2\ttwo\n" +
-			"3\tthree";
-
-		try(BufferedReader reader = new BufferedReader(new StringReader(csv))){
-			first = CsvUtil.getFormat(reader);
-			second = CsvUtil.getFormat(reader);
-		}
-
-		assertNotSame(first.getEncoder(), second.getEncoder());
+	private Anonymous(){
 	}
+
+	@Override
+	public String getName(){
+		return null;
+	}
+
+	static final Anonymous INSTANCE = new Anonymous();
 }

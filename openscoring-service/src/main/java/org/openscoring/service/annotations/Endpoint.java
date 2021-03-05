@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Villu Ruusmann
+ * Copyright (c) 2019 Villu Ruusmann
  *
  * This file is part of Openscoring
  *
@@ -16,24 +16,27 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with Openscoring.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.openscoring.common;
+package org.openscoring.service.annotations;
 
-import java.io.IOException;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
-import com.google.common.annotations.GwtIncompatible;
-import org.dmg.pmml.DataType;
-
-@GwtIncompatible (
-	value = "DataTypeSerializer"
+@Target (
+	value = ElementType.METHOD
 )
-public class DataTypeSerializer extends JsonSerializer<DataType> {
+@Retention (
+	value = RetentionPolicy.RUNTIME
+)
+public @interface Endpoint {
 
-	@Override
-	public void serialize(DataType dataType, JsonGenerator generator, SerializerProvider provider) throws IOException, JsonProcessingException {
-		generator.writeString(dataType.value());
+	Family family();
+
+	static
+	public enum Family {
+		INFORMATION,
+		MANAGEMENT,
+		EVALUATION,
 	}
 }

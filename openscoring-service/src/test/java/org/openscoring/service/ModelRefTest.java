@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Villu Ruusmann
+ * Copyright (c) 2019 Villu Ruusmann
  *
  * This file is part of Openscoring
  *
@@ -16,24 +16,23 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with Openscoring.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.openscoring.common;
+package org.openscoring.service;
 
-import java.io.IOException;
+import org.junit.Test;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
-import com.google.common.annotations.GwtIncompatible;
-import org.dmg.pmml.DataType;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
-@GwtIncompatible (
-	value = "DataTypeDeserializer"
-)
-public class DataTypeDeserializer extends JsonDeserializer<DataType> {
+public class ModelRefTest {
 
-	@Override
-	public DataType deserialize(JsonParser parser, DeserializationContext context) throws IOException, JsonProcessingException {
-		return DataType.fromValue(parser.getText());
+	@Test
+	public void validateId(){
+		assertTrue(ModelRef.validateId("com.mycompany.Test"));
+
+		assertTrue(ModelRef.validateId("Test_v1"));
+		assertTrue(ModelRef.validateId("Test_v1.0"));
+
+		assertFalse(ModelRef.validateId("."));
+		assertFalse(ModelRef.validateId("-Test"));
 	}
 }

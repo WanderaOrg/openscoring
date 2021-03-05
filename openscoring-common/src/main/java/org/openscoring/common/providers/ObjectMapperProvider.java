@@ -16,46 +16,48 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with Openscoring.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.openscoring.service;
-
-import java.util.concurrent.TimeUnit;
+package org.openscoring.common.providers;
 
 import javax.ws.rs.ext.ContextResolver;
 import javax.ws.rs.ext.Provider;
 
-import com.codahale.metrics.json.MetricsModule;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-
-import org.openscoring.common.OpenscoringModule;
+import org.jpmml.model.jackson.PMMLModule;
 
 @Provider
 public class ObjectMapperProvider implements ContextResolver<ObjectMapper> {
 
-	private ObjectMapper mapper = null;
+	private ObjectMapper objectMapper = null;
+
 
 	public ObjectMapperProvider(){
-		ObjectMapper mapper = new ObjectMapper();
-		mapper.registerModule(new OpenscoringModule());
-		mapper.registerModule(new MetricsModule(TimeUnit.SECONDS, TimeUnit.SECONDS, false));
-		mapper.enable(SerializationFeature.INDENT_OUTPUT);
-		mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-		mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+		ObjectMapper objectMapper = new ObjectMapper();
+		objectMapper.registerModule(new PMMLModule());
+		objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+		objectMapper.setVisibility(PropertyAccessor.GETTER, JsonAutoDetect.Visibility.NONE);
+		objectMapper.setVisibility(PropertyAccessor.IS_GETTER, JsonAutoDetect.Visibility.NONE);
+		objectMapper.setVisibility(PropertyAccessor.SETTER, JsonAutoDetect.Visibility.NONE);
+		objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+		objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+		objectMapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
-		setMapper(mapper);
+		setObjectMapper(objectMapper);
 	}
 
 	@Override
 	public ObjectMapper getContext(Class<?> clazz){
-		return getMapper();
+		return getObjectMapper();
 	}
 
-	public ObjectMapper getMapper(){
-		return this.mapper;
+	public ObjectMapper getObjectMapper(){
+		return this.objectMapper;
 	}
 
-	private void setMapper(ObjectMapper mapper){
-		this.mapper = mapper;
+	private void setObjectMapper(ObjectMapper objectMapper){
+		this.objectMapper = objectMapper;
 	}
 }

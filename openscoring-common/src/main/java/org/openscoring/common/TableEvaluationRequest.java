@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Villu Ruusmann
+ * Copyright (c) 2019 Villu Ruusmann
  *
  * This file is part of Openscoring
  *
@@ -26,33 +26,56 @@ import org.jpmml.model.ToStringHelper;
 @JsonInclude (
 	value = JsonInclude.Include.NON_EMPTY
 )
-public class BatchEvaluationRequest extends SimpleRequest implements BatchRequest<EvaluationRequest> {
+public class TableEvaluationRequest extends SimpleRequest implements BatchRequest<EvaluationRequest> {
 
-	private String id = null;
+	private TableFormat format = null;
+
+	private List<String> columns = null;
 
 	private List<EvaluationRequest> requests = null;
 
 
-	public BatchEvaluationRequest(){
+	public TableEvaluationRequest(){
 	}
 
-	public BatchEvaluationRequest(String id){
-		setId(id);
+	public String getIdColumn(){
+		List<String> columns = getColumns();
+
+		if(columns != null && columns.size() > 0){
+			String column = columns.get(0);
+
+			if(("id").equalsIgnoreCase(column)){
+				return column;
+			}
+		}
+
+		return null;
 	}
 
 	@Override
 	protected ToStringHelper toStringHelper(){
 		return super.toStringHelper()
-			.add("id", getId())
+			.add("format", getFormat())
+			.add("columns", getColumns())
 			.add("requests", getRequests());
 	}
 
-	public String getId(){
-		return this.id;
+	public TableFormat getFormat(){
+		return this.format;
 	}
 
-	public BatchEvaluationRequest setId(String id){
-		this.id = id;
+	public TableEvaluationRequest setFormat(TableFormat format){
+		this.format = format;
+
+		return this;
+	}
+
+	public List<String> getColumns(){
+		return this.columns;
+	}
+
+	public TableEvaluationRequest setColumns(List<String> columns){
+		this.columns = columns;
 
 		return this;
 	}
@@ -62,7 +85,7 @@ public class BatchEvaluationRequest extends SimpleRequest implements BatchReques
 		return this.requests;
 	}
 
-	public BatchEvaluationRequest setRequests(List<EvaluationRequest> requests){
+	public TableEvaluationRequest setRequests(List<EvaluationRequest> requests){
 		this.requests = requests;
 
 		return this;

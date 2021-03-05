@@ -18,131 +18,42 @@
  */
 package org.openscoring.service;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.Collection;
+import java.security.Principal;
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Function;
 
-import javax.inject.Inject;
-import javax.inject.Named;
-import javax.inject.Singleton;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Marshaller;
-import javax.xml.bind.Unmarshaller;
-import javax.xml.bind.ValidationEvent;
-import javax.xml.bind.ValidationEventHandler;
-import javax.xml.transform.Result;
-import javax.xml.transform.Source;
-import javax.xml.transform.sax.SAXSource;
-import javax.xml.transform.stream.StreamResult;
-import javax.xml.validation.Schema;
-
-import com.google.common.base.Preconditions;
-import com.google.common.hash.Hashing;
-import com.google.common.hash.HashingInputStream;
-import com.google.common.io.CountingInputStream;
-import com.typesafe.config.Config;
-import org.dmg.pmml.PMML;
-import org.dmg.pmml.Visitor;
-import org.jpmml.evaluator.ModelEvaluator;
-import org.jpmml.evaluator.ModelEvaluatorFactory;
-import org.jpmml.model.ImportFilter;
-import org.jpmml.model.JAXBUtil;
-import org.jvnet.hk2.annotations.Service;
-import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
-import org.xml.sax.XMLReader;
-import org.xml.sax.helpers.XMLReaderFactory;
-
-@Service
-@Singleton
 public class ModelRegistry {
 
-	private List<Class<? extends Visitor>> visitorClazzes = new ArrayList<>();
+	private ConcurrentMap<Principal, ConcurrentMap<String, Model>> models = new ConcurrentHashMap<>();
 
-	private boolean validate = false;
+	private Function<Principal, ConcurrentMap<String, Model>> initializer = new Function<Principal, ConcurrentMap<String, Model>>(){
 
-	private ConcurrentMap<String, Model> models = new ConcurrentHashMap<>();
-
-
-	@Inject
-	public ModelRegistry(@Named("openscoring") Config config){
-		Config modelRegistryConfig = config.getConfig("modelRegistry");
-
-		List<String> visitorClassNames = modelRegistryConfig.getStringList("visitorClasses");
-		for(String visitorClassName : visitorClassNames){
-			Class<?> clazz;
-
-			try {
-				clazz = Class.forName(visitorClassName);
-			} catch(ClassNotFoundException cnfe){
-				throw new IllegalArgumentException(cnfe);
-			}
-
-			Class<? extends Visitor> visitorClazz;
-
-			try {
-				visitorClazz = clazz.asSubclass(Visitor.class);
-			} catch(ClassCastException cce){
-				throw new IllegalArgumentException(cce);
-			}
-
-			this.visitorClazzes.add(visitorClazz);
+		@Override
+		public ConcurrentMap<String, Model> apply(Principal principal){
+			return new ConcurrentHashMap<>();
 		}
+	};
 
-		this.validate = modelRegistryConfig.getBoolean("validate");
+
+	public ModelRegistry(){
 	}
 
-	public Collection<Map.Entry<String, Model>> entries(){
-		return this.models.entrySet();
+	public Map<String, Model> getModels(Principal owner){
+		return this.models.computeIfAbsent(owner, getInitializer());
 	}
 
-	@SuppressWarnings (
-		value = {"resource"}
-	)
-	public Model load(InputStream is) throws Exception {
-		CountingInputStream countingIs = new CountingInputStream(is);
-
-		HashingInputStream hashingIs = new HashingInputStream(Hashing.md5(), countingIs);
-
-		ModelEvaluator<?> evaluator = unmarshal(hashingIs, this.validate);
-
-		PMML pmml = evaluator.getPMML();
-
-		for(Class<? extends Visitor> visitorClazz : this.visitorClazzes){
-			Visitor visitor = visitorClazz.newInstance();
-
-			visitor.applyTo(pmml);
-		}
-
-		evaluator.verify();
-
-		Model model = new Model(evaluator);
-		model.putProperty(Model.PROPERTY_FILE_SIZE, countingIs.getCount());
-		model.putProperty(Model.PROPERTY_FILE_MD5SUM, (hashingIs.hash()).toString());
-
-		return model;
+	public Model get(ModelRef modelRef){
+		return get(modelRef, false);
 	}
 
-	public void store(Model model, OutputStream os) throws JAXBException {
-		ModelEvaluator<?> evaluator = model.getEvaluator();
+	public Model get(ModelRef modelRef, boolean touch){
+		Map<String, Model> models = getModels(modelRef.getOwner());
 
-		marshal(evaluator, os);
-	}
-
-	public Model get(String id){
-		return get(id, false);
-	}
-
-	public Model get(String id, boolean touch){
-		Model model = this.models.get(id);
-
+		Model model = models.get(modelRef.getId());
 		if(model != null && touch){
 			model.putProperty(Model.PROPERTY_ACCESSED_TIMESTAMP, new Date());
 		}
@@ -150,77 +61,31 @@ public class ModelRegistry {
 		return model;
 	}
 
-	public boolean put(String id, Model model){
-		Model oldModel = this.models.putIfAbsent(id, Preconditions.checkNotNull(model));
+	public boolean put(ModelRef modelRef, Model model){
+		Map<String, Model> models = getModels(modelRef.getOwner());
+
+		Model oldModel = models.putIfAbsent(modelRef.getId(), Objects.requireNonNull(model));
 
 		return (oldModel == null);
 	}
 
-	public boolean replace(String id, Model oldModel, Model model){
-		return this.models.replace(id, oldModel, Preconditions.checkNotNull(model));
+	public boolean replace(ModelRef modelRef, Model oldModel, Model model){
+		Map<String, Model> models = getModels(modelRef.getOwner());
+
+		return models.replace(modelRef.getId(), oldModel, Objects.requireNonNull(model));
 	}
 
-	public boolean remove(String id, Model model){
-		return this.models.remove(id, model);
+	public boolean remove(ModelRef modelRef, Model model){
+		Map<String, Model> models = getModels(modelRef.getOwner());
+
+		return models.remove(modelRef.getId(), model);
 	}
 
-	static
-	public boolean validateId(String id){
-		return (id != null && (id).matches(ID_REGEX));
+	public Function<Principal, ConcurrentMap<String, Model>> getInitializer(){
+		return this.initializer;
 	}
 
-	static
-	private ModelEvaluator<?> unmarshal(InputStream is, boolean validate) throws IOException, SAXException, JAXBException {
-		XMLReader reader = XMLReaderFactory.createXMLReader();
-		reader.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-
-		ImportFilter filter = new ImportFilter(reader);
-
-		Source source = new SAXSource(filter, new InputSource(is));
-
-		Unmarshaller unmarshaller = JAXBUtil.createUnmarshaller();
-		unmarshaller.setEventHandler(new SimpleValidationEventHandler());
-
-		if(validate){
-			Schema schema = JAXBUtil.getSchema();
-
-			unmarshaller.setSchema(schema);
-		}
-
-		PMML pmml = (PMML)unmarshaller.unmarshal(source);
-
-		ModelEvaluatorFactory modelEvaluatorFactory = ModelEvaluatorFactory.newInstance();
-
-		return modelEvaluatorFactory.newModelEvaluator(pmml);
+	public void setInitializer(Function<Principal, ConcurrentMap<String, Model>> initializer){
+		this.initializer = Objects.requireNonNull(initializer);
 	}
-
-	static
-	private void marshal(ModelEvaluator<?> evaluator, OutputStream os) throws JAXBException {
-		PMML pmml = evaluator.getPMML();
-
-		Result result = new StreamResult(os);
-
-		Marshaller marshaller = JAXBUtil.createMarshaller();
-
-		marshaller.marshal(pmml, result);
-	}
-
-	static
-	private class SimpleValidationEventHandler implements ValidationEventHandler {
-
-		@Override
-		public boolean handleEvent(ValidationEvent event){
-			int severity = event.getSeverity();
-
-			switch(severity){
-				case ValidationEvent.ERROR:
-				case ValidationEvent.FATAL_ERROR:
-					return false;
-				default:
-					return true;
-			}
-		}
-	}
-
-	public static final String ID_REGEX = "[a-zA-Z0-9][a-zA-Z0-9\\_\\-]*";
 }

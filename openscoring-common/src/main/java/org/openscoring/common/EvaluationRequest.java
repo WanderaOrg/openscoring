@@ -21,8 +21,7 @@ package org.openscoring.common;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
+import org.jpmml.model.ToStringHelper;
 
 @JsonInclude (
 	value = JsonInclude.Include.NON_EMPTY
@@ -42,27 +41,29 @@ public class EvaluationRequest extends SimpleRequest {
 	}
 
 	@Override
-	public String toString(){
-		ToStringHelper stringHelper = MoreObjects.toStringHelper(getClass())
+	protected ToStringHelper toStringHelper(){
+		return super.toStringHelper()
 			.add("id", getId())
 			.add("arguments", getArguments());
-
-		return stringHelper.toString();
 	}
 
 	public String getId(){
 		return this.id;
 	}
 
-	public void setId(String id){
+	public EvaluationRequest setId(String id){
 		this.id = id;
+
+		return this;
 	}
 
 	public Map<String, ?> getArguments(){
 		return this.arguments;
 	}
 
-	public void setArguments(Map<String, ?> arguments){
+	public EvaluationRequest setArguments(Map<String, ?> arguments){
 		this.arguments = arguments;
+
+		return this;
 	}
 }

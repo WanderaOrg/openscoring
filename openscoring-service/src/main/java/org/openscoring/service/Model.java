@@ -22,24 +22,28 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.dmg.pmml.MiningFunction;
-import org.jpmml.evaluator.ModelEvaluator;
+import org.jpmml.evaluator.Evaluator;
 import org.openscoring.common.Field;
 
 public class Model {
 
-	private ModelEvaluator<?> evaluator = null;
+	private Evaluator evaluator = null;
 
 	private Map<String, Object> properties = null;
 
 	private Map<String, List<Field>> schema = null;
 
 
-	protected Model(){
+	public Model(Model model){
+		setEvaluator(model.getEvaluator());
+		setProperties(model.getProperties());
+		setSchema(model.getSchema());
 	}
 
-	public Model(ModelEvaluator<?> evaluator){
+	public Model(Evaluator evaluator){
 		setEvaluator(evaluator);
 
 		Map<String, Object> properties = new LinkedHashMap<>();
@@ -51,22 +55,22 @@ public class Model {
 		setSchema(ModelUtil.encodeSchema(evaluator));
 	}
 
-	public ModelEvaluator<?> getEvaluator(){
+	public Evaluator getEvaluator(){
 		return this.evaluator;
 	}
 
-	private void setEvaluator(ModelEvaluator<?> evaluator){
-		this.evaluator = evaluator;
+	private void setEvaluator(Evaluator evaluator){
+		this.evaluator = Objects.requireNonNull(evaluator);
 	}
 
 	public MiningFunction getMiningFunction(){
-		ModelEvaluator<?> evaluator = getEvaluator();
+		Evaluator evaluator = getEvaluator();
 
 		return evaluator.getMiningFunction();
 	}
 
 	public String getSummary(){
-		ModelEvaluator<?> evaluator = getEvaluator();
+		Evaluator evaluator = getEvaluator();
 
 		return evaluator.getSummary();
 	}
@@ -82,7 +86,7 @@ public class Model {
 	}
 
 	private void setProperties(Map<String, Object> properties){
-		this.properties = properties;
+		this.properties = Objects.requireNonNull(properties);
 	}
 
 	public Map<String, List<Field>> getSchema(){
@@ -90,11 +94,14 @@ public class Model {
 	}
 
 	private void setSchema(Map<String, List<Field>> schema){
-		this.schema = schema;
+		this.schema = Objects.requireNonNull(schema);
 	}
 
 	public static final String PROPERTY_CREATED_TIMESTAMP = "created.timestamp";
 	public static final String PROPERTY_ACCESSED_TIMESTAMP = "accessed.timestamp";
+
 	public static final String PROPERTY_FILE_SIZE = "file.size";
 	public static final String PROPERTY_FILE_MD5SUM = "file.md5sum";
+
+	public static final String PROPERTY_MODEL_VERSION = "model.version";
 }

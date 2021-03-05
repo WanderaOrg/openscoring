@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Villu Ruusmann
+ * Copyright (c) 2019 Villu Ruusmann
  *
  * This file is part of Openscoring
  *
@@ -18,22 +18,23 @@
  */
 package org.openscoring.common;
 
-import java.io.IOException;
+import java.util.List;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
-import com.google.common.annotations.GwtIncompatible;
-import org.dmg.pmml.MiningFunction;
+public interface BatchResponse<E extends SimpleResponse> {
 
-@GwtIncompatible (
-	value = "MiningFunctionDeserializer"
-)
-public class MiningFunctionDeserializer extends JsonDeserializer<MiningFunction> {
+	List<E> getResponses();
 
-	@Override
-	public MiningFunction deserialize(JsonParser parser, DeserializationContext context) throws IOException, JsonProcessingException {
-		return MiningFunction.fromValue(parser.getText());
+	default
+	int getSize(){
+		List<E> responses = getResponses();
+
+		return responses.size();
+	}
+
+	default
+	E getResponse(int index){
+		List<E> responses = getResponses();
+
+		return responses.get(index);
 	}
 }
