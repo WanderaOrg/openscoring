@@ -5,10 +5,9 @@
 	/>
 
 	<inherits 
-		name="com.google.common.base.Base"
-	/>
-
-	<inherits 
 		name="org.dmg.pmml.PMML"
+	/>
+	<inherits
+		name="org.jpmml.model.Model"
 	/>
 </module>

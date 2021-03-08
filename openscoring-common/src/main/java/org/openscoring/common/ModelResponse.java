@@ -22,10 +22,9 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 
 import org.dmg.pmml.MiningFunction;
+import org.jpmml.model.ToStringHelper;
 
 @JsonInclude (
 	value = JsonInclude.Include.NON_EMPTY
@@ -54,62 +53,67 @@ public class ModelResponse extends SimpleResponse {
 	}
 
 	@Override
-	public String toString(){
-		String message = getMessage();
-		if(message != null){
-			return super.toString();
-		}
-
-		ToStringHelper stringHelper = MoreObjects.toStringHelper(getClass())
+	protected ToStringHelper toStringHelper(){
+		return super.toStringHelper()
 			.add("id", getId())
 			.add("miningFunction", getMiningFunction())
 			.add("summary", getSummary())
 			.add("properties", getProperties())
 			.add("schema", getSchema())
 			.add("modelHeader", getModelHeader());
-
-		return stringHelper.toString();
 	}
 
 	public String getId(){
 		return this.id;
 	}
 
-	public void setId(String id){
+	public ModelResponse setId(String id){
 		this.id = id;
+
+		return this;
 	}
 
 	public MiningFunction getMiningFunction(){
 		return this.miningFunction;
 	}
 
-	public void setMiningFunction(MiningFunction miningFunction){
+	public ModelResponse setMiningFunction(MiningFunction miningFunction){
 		this.miningFunction = miningFunction;
+
+		return this;
 	}
 
 	public String getSummary(){
 		return this.summary;
 	}
 
-	public void setSummary(String summary){
+	public ModelResponse setSummary(String summary){
 		this.summary = summary;
+
+		return this;
 	}
 
 	public Map<String, Object> getProperties(){
 		return this.properties;
 	}
 
-	public void setProperties(Map<String, Object> properties){
+	public ModelResponse setProperties(Map<String, Object> properties){
 		this.properties = properties;
+
+		return this;
 	}
 
 	public Map<String, List<Field>> getSchema(){
 		return this.schema;
 	}
 
-	public void setSchema(Map<String, List<Field>> schema){
+	public ModelResponse setSchema(Map<String, List<Field>> schema){
 		this.schema = schema;
+
+		return this;
 	}
+
+	public static final String DEFAULT_TARGET_NAME = "_target";
 
 	public ModelHeader getModelHeader() {
 		return modelHeader;

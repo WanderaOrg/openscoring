@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Villu Ruusmann
+ * Copyright (c) 2018 Villu Ruusmann
  *
  * This file is part of Openscoring
  *
@@ -18,22 +18,7 @@
  */
 package org.openscoring.common;
 
-import java.io.IOException;
+public interface Headers {
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
-import com.google.common.annotations.GwtIncompatible;
-import org.dmg.pmml.OpType;
-
-@GwtIncompatible (
-	value = "OpTypeDeserializer"
-)
-public class OpTypeDeserializer extends JsonDeserializer<OpType> {
-
-	@Override
-	public OpType deserialize(JsonParser parser, DeserializationContext context) throws IOException, JsonProcessingException {
-		return OpType.fromValue(parser.getText());
-	}
+	String APPLICATION = "X-Application";
 }

@@ -23,20 +23,21 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
-import org.dmg.pmml.DataField;
-import org.dmg.pmml.DataType;
 import org.dmg.pmml.FieldName;
+import org.dmg.pmml.HasContinuousDomain;
+import org.dmg.pmml.HasDiscreteDomain;
 import org.dmg.pmml.Interval;
-import org.dmg.pmml.OpType;
 import org.dmg.pmml.Value;
+import org.jpmml.evaluator.Evaluator;
 import org.jpmml.evaluator.HasGroupFields;
+import org.jpmml.evaluator.HasInputFields;
+import org.jpmml.evaluator.HasResultFields;
 import org.jpmml.evaluator.InputField;
-import org.jpmml.evaluator.ModelEvaluator;
+import org.jpmml.evaluator.ModelField;
 import org.jpmml.evaluator.OutputField;
-import org.jpmml.evaluator.OutputUtil;
 import org.jpmml.evaluator.TargetField;
 import org.jpmml.evaluator.TypeUtil;
 import org.openscoring.common.Field;
@@ -47,182 +48,131 @@ public class ModelUtil {
 	}
 
 	static
-	public Map<String, List<Field>> encodeSchema(ModelEvaluator<?> evaluator){
+	public Map<String, List<Field>> encodeSchema(Evaluator evaluator){
 		Map<String, List<Field>> result = new LinkedHashMap<>();
 
-		List<InputField> activeFields = evaluator.getActiveFields();
-		List<InputField> groupFields = Collections.emptyList();
+		if(evaluator instanceof HasInputFields){
+			HasInputFields hasInputFields = (HasInputFields)evaluator;
+
+			List<InputField> inputFields = hasInputFields.getInputFields();
+			if(!inputFields.isEmpty()){
+				result.put("inputFields", encodeModelFields(inputFields));
+			}
+		} // End if
 
 		if(evaluator instanceof HasGroupFields){
 			HasGroupFields hasGroupFields = (HasGroupFields)evaluator;
 
-			groupFields = hasGroupFields.getGroupFields();
-		}
-
-		result.put("activeFields", encodeInputFields(activeFields));
-		result.put("groupFields", encodeInputFields(groupFields));
-
-		List<TargetField> targetFields = evaluator.getTargetFields();
-
-		result.put("targetFields", encodeTargetFields(targetFields));
-
-		List<OutputField> outputFields = evaluator.getOutputFields();
-
-		result.put("outputFields", encodeOutputFields(outputFields, evaluator));
-
-		return result;
-	}
-
-	static
-	private List<Field> encodeInputFields(List<InputField> inputFields){
-		Function<InputField, Field> function = new Function<InputField, Field>(){
-
-			@Override
-			public Field apply(InputField inputField){
-				FieldName name = inputField.getName();
-
-				DataField dataField = (DataField)inputField.getField();
-
-				Field field = new Field(name.getValue());
-				field.setName(dataField.getDisplayName());
-				field.setDataType(inputField.getDataType());
-				field.setOpType(inputField.getOpType());
-				field.setValues(encodeValues(dataField));
-
-				return field;
+			List<InputField> groupFields = hasGroupFields.getGroupFields();
+			if(!groupFields.isEmpty()){
+				result.put("groupFields", encodeModelFields(groupFields));
 			}
-		};
+		} // End if
 
-		List<Field> fields = new ArrayList<>(Lists.transform(inputFields, function));
+		if(evaluator instanceof HasResultFields){
+			HasResultFields hasResultFields = (HasResultFields)evaluator;
 
-		return fields;
-	}
-
-	static
-	private List<Field> encodeTargetFields(List<TargetField> targetFields){
-		Function<TargetField, Field> function = new Function<TargetField, Field>(){
-
-			@Override
-			public Field apply(TargetField targetField){
-				FieldName name = targetField.getName();
-
-				// A "phantom" default target field
-				if(targetField.isSynthetic()){
-					name = ModelResource.DEFAULT_NAME;
-				}
-
-				DataField dataField = targetField.getDataField();
-
-				Field field = new Field(name.getValue());
-				field.setName(dataField.getDisplayName());
-				field.setDataType(targetField.getDataType());
-				field.setOpType(targetField.getOpType());
-				field.setValues(encodeValues(dataField));
-
-				return field;
+			List<TargetField> targetFields = hasResultFields.getTargetFields();
+			if(!targetFields.isEmpty()){
+				result.put("targetFields", encodeModelFields(targetFields));
 			}
-		};
 
-		List<Field> fields = new ArrayList<>(Lists.transform(targetFields, function));
-
-		return fields;
-	}
-
-	static
-	private List<Field> encodeOutputFields(List<OutputField> outputFields, final ModelEvaluator<?> evaluator){
-		Function<OutputField, Field> function = new Function<OutputField, Field>(){
-
-			@Override
-			public Field apply(OutputField outputField){
-				FieldName name = outputField.getName();
-
-				org.dmg.pmml.OutputField pmmlOutputField = outputField.getOutputField();
-
-				DataType dataType = outputField.getDataType();
-				OpType opType = outputField.getOpType();
-
-				if(dataType == null){
-
-					try {
-						dataType = OutputUtil.getDataType(pmmlOutputField, evaluator);
-					} catch(Exception e){
-						// Ignored
-					}
-				}
-
-				if(opType == null){
-
-					try {
-						opType = TypeUtil.getOpType(dataType);
-					} catch(Exception e){
-						// Ignored
-					}
-				}
-
-				Field field = new Field(name.getValue());
-				field.setName(pmmlOutputField.getDisplayName());
-				field.setDataType(outputField.getDataType());
-				field.setOpType(outputField.getOpType());
-
-				return field;
-			}
-		};
-
-		List<Field> fields = new ArrayList<>(Lists.transform(outputFields, function));
-
-		return fields;
-	}
-
-	static
-	private List<String> encodeValues(DataField dataField){
-		List<String> result = new ArrayList<>();
-
-		List<Interval> intervals = dataField.getIntervals();
-		for(Interval interval : intervals){
-			StringBuilder sb = new StringBuilder();
-
-			Double leftMargin = interval.getLeftMargin();
-			sb.append(Double.toString(leftMargin != null ? leftMargin : Double.NEGATIVE_INFINITY));
-
-			sb.append(", ");
-
-			Double rightMargin = interval.getRightMargin();
-			sb.append(Double.toString(rightMargin != null ? rightMargin : Double.POSITIVE_INFINITY));
-
-			String value = sb.toString();
-
-			Interval.Closure closure = interval.getClosure();
-			switch(closure){
-				case OPEN_OPEN:
-					result.add("(" + value + ")");
-					break;
-				case OPEN_CLOSED:
-					result.add("(" + value + "]");
-					break;
-				case CLOSED_OPEN:
-					result.add("[" + value + ")");
-					break;
-				case CLOSED_CLOSED:
-					result.add("[" + value + "]");
-					break;
-				default:
-					break;
-			}
-		}
-
-		List<Value> values = dataField.getValues();
-		for(Value value : values){
-			Value.Property property = value.getProperty();
-
-			switch(property){
-				case VALID:
-					result.add(value.getValue());
-					break;
-				default:
-					break;
+			List<OutputField> outputFields = hasResultFields.getOutputFields();
+			if(!outputFields.isEmpty()){
+				result.put("outputFields", encodeModelFields(outputFields));
 			}
 		}
 
 		return result;
+	}
+
+	static
+	private List<Field> encodeModelFields(List<? extends ModelField> modelFields){
+		Function<ModelField, Field> function = new Function<ModelField, Field>(){
+
+			@Override
+			public Field apply(ModelField modelField){
+				org.dmg.pmml.Field<?> pmmlField = modelField.getField();
+
+				FieldName name = modelField.getName();
+
+				Field field = new Field(name.getValue());
+				field.setName(modelField.getDisplayName());
+				field.setOpType(modelField.getOpType());
+				field.setDataType(modelField.getDataType());
+
+				List<String> values = new ArrayList<>();
+
+				if(pmmlField instanceof HasContinuousDomain){
+					values.addAll(encodeContinuousDomain((org.dmg.pmml.Field & HasContinuousDomain)pmmlField));
+				} // End if
+
+				if(pmmlField instanceof HasDiscreteDomain){
+					values.addAll(encodeDiscreteDomain((org.dmg.pmml.Field & HasDiscreteDomain)pmmlField));
+				}
+
+				field.setValues(values);
+
+				return field;
+			}
+		};
+
+		return modelFields.stream()
+			.map(function)
+			.collect(Collectors.toList());
+	}
+
+	static
+	private <F extends org.dmg.pmml.Field<F> & HasContinuousDomain<F>> List<String> encodeContinuousDomain(F field){
+
+		if(field.hasIntervals()){
+			List<Interval> intervals = field.getIntervals();
+
+			Function<Interval, String> function = new Function<Interval, String>(){
+
+				@Override
+				public String apply(Interval interval){
+					Number leftMargin = interval.getLeftMargin();
+					Number rightMargin = interval.getRightMargin();
+
+					String value = (leftMargin != null ? leftMargin : Double.NEGATIVE_INFINITY) + ", " + (rightMargin != null ? rightMargin : Double.POSITIVE_INFINITY);
+
+					Interval.Closure closure = interval.getClosure();
+					switch(closure){
+						case OPEN_OPEN:
+							return "(" + value + ")";
+						case OPEN_CLOSED:
+							return "(" + value + "]";
+						case CLOSED_OPEN:
+							return "[" + value + ")";
+						case CLOSED_CLOSED:
+							return "[" + value + "]";
+						default:
+							throw new IllegalArgumentException();
+					}
+				}
+			};
+
+			return intervals.stream()
+				.map(function)
+				.collect(Collectors.toList());
+		}
+
+		return Collections.emptyList();
+	}
+
+	static
+	private <F extends org.dmg.pmml.Field<F> & HasDiscreteDomain<F>> List<String> encodeDiscreteDomain(F field){
+
+		if(field.hasValues()){
+			List<Value> values = field.getValues();
+
+			return values.stream()
+				.filter(value -> (Value.Property.VALID).equals(value.getProperty()))
+				.map(value -> TypeUtil.format(value.getValue()))
+				.collect(Collectors.toList());
+		}
+
+		return Collections.emptyList();
 	}
 }

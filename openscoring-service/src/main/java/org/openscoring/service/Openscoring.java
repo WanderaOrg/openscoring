@@ -18,14 +18,19 @@
  */
 package org.openscoring.service;
 
+import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.List;
 
-import javax.inject.Singleton;
+import javax.xml.bind.ValidationEvent;
+import javax.xml.bind.ValidationEventHandler;
+import javax.xml.validation.Schema;
 
-import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.jaxrs.json.JacksonJsonProvider;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
+import org.dmg.pmml.FieldName;
+import org.dmg.pmml.Visitor;
 import org.glassfish.hk2.utilities.Binder;
 import org.glassfish.hk2.utilities.binding.AbstractBinder;
 import org.glassfish.jersey.media.multipart.MultiPartFeature;
@@ -35,30 +40,86 @@ import org.glassfish.jersey.server.ResourceConfig;
 import org.glassfish.jersey.server.filter.EncodingFilter;
 import org.glassfish.jersey.server.filter.HttpMethodOverrideFilter;
 import org.glassfish.jersey.server.filter.RolesAllowedDynamicFeature;
+import org.jpmml.evaluator.LoadingModelEvaluatorBuilder;
+import org.jpmml.evaluator.ModelEvaluatorFactory;
+import org.jpmml.evaluator.OutputFilters;
+import org.jpmml.evaluator.ResultMapper;
+import org.jpmml.evaluator.ValueFactoryFactory;
+import org.jpmml.model.JAXBUtil;
+import org.jpmml.model.visitors.VisitorBattery;
+import org.openscoring.common.ModelResponse;
+import org.openscoring.common.providers.ObjectMapperProvider;
+import org.openscoring.service.filters.ApplicationHeaderFilter;
+import org.openscoring.service.providers.ModelProvider;
+import org.openscoring.service.providers.ModelRefConverterProvider;
+import org.openscoring.service.providers.TableProvider;
+import org.xml.sax.SAXException;
 
 public class Openscoring extends ResourceConfig {
 
-	public Openscoring(){
-		super(ModelResource.class, MetricResource.class);
+	private Config config = null;
 
-		final
+	private ModelRegistry modelRegistry = null;
+
+	private LoadingModelEvaluatorBuilder loadingModelEvaluatorBuilder = null;
+
+
+	public Openscoring(){
 		Config config = ConfigFactory.load();
 
-		Binder binder = new AbstractBinder(){
+		setConfig(config);
+
+		Binder configBinder = new AbstractBinder(){
 
 			@Override
 			public void configure(){
 				bind(config).to(Config.class).named("openscoring");
-
-				bind(ModelRegistry.class).to(ModelRegistry.class).in(Singleton.class);
-				bind(MetricRegistry.class).to(MetricRegistry.class).in(Singleton.class);
 			}
 		};
-		register(binder);
+		register(configBinder);
+
+		ModelRegistry modelRegistry = createModelRegistry(config);
+
+		setModelRegistry(modelRegistry);
+
+		Binder modelRegistryBinder = new AbstractBinder(){
+
+			@Override
+			public void configure(){
+				bind(modelRegistry).to(ModelRegistry.class).named("openscoring");
+			}
+		};
+		register(modelRegistryBinder);
+
+		LoadingModelEvaluatorBuilder loadingModelEvaluatorBuilder = createLoadingModelEvaluatorBuilder(config);
+
+		setLoadingModelEvaluatorBuilder(loadingModelEvaluatorBuilder);
+
+		Binder loadingModelEvaluatorBuilderBinder = new AbstractBinder(){
+
+			@Override
+			public void configure(){
+				bind(loadingModelEvaluatorBuilder).to(LoadingModelEvaluatorBuilder.class);
+			}
+		};
+		register(loadingModelEvaluatorBuilderBinder);
+
+		Config applicationConfig = config.getConfig("application");
+
+		register(ModelResource.class);
+
+		// Convert path variables to ModelRef objects
+		register(loadClass(ModelRefConverterProvider.class, applicationConfig));
+
+		// PMML support
+		register(loadClass(ModelProvider.class, applicationConfig));
 
 		// JSON support
 		register(JacksonJsonProvider.class);
 		register(ObjectMapperProvider.class);
+
+		// CSV support
+		register(loadClass(TableProvider.class, applicationConfig));
 
 		// Convert exceptions to JSON objects
 		register(WebApplicationExceptionMapper.class);
@@ -77,19 +138,191 @@ public class Openscoring extends ResourceConfig {
 		register(GZipEncoder.class);
 		register(DeflateEncoder.class);
 
-		Config applicationConfig = config.getConfig("application");
+		// Application identification
+		register(ApplicationHeaderFilter.class);
 
 		List<String> componentClassNames = applicationConfig.getStringList("componentClasses");
 		for(String componentClassName : componentClassNames){
-			Class<?> clazz;
-
-			try {
-				clazz = Class.forName(componentClassName);
-			} catch(ClassNotFoundException cnfe){
-				throw new IllegalArgumentException(cnfe);
-			}
+			Class<?> clazz = loadClass(Object.class, componentClassName);
 
 			register(clazz);
+		}
+	}
+
+	public Config getConfig(){
+		return this.config;
+	}
+
+	private void setConfig(Config config){
+		this.config = config;
+	}
+
+	public ModelRegistry getModelRegistry(){
+		return this.modelRegistry;
+	}
+
+	private void setModelRegistry(ModelRegistry modelRegistry){
+		this.modelRegistry = modelRegistry;
+	}
+
+	public LoadingModelEvaluatorBuilder getLoadingModelEvaluatorBuilder(){
+		return this.loadingModelEvaluatorBuilder;
+	}
+
+	private void setLoadingModelEvaluatorBuilder(LoadingModelEvaluatorBuilder loadingModelEvaluatorBuilder){
+		this.loadingModelEvaluatorBuilder = loadingModelEvaluatorBuilder;
+	}
+
+	static
+	private ModelRegistry createModelRegistry(Config config){
+		ModelRegistry modelRegistry = new ModelRegistry();
+
+		return modelRegistry;
+	}
+
+	static
+	private LoadingModelEvaluatorBuilder createLoadingModelEvaluatorBuilder(Config config){
+		Config modelEvaluatorBuilderConfig = config.getConfig("modelEvaluatorBuilder");
+
+		LoadingModelEvaluatorBuilder modelEvaluatorBuilder = new LoadingModelEvaluatorBuilder();
+
+		Class<? extends ModelEvaluatorFactory> modelEvaluatorFactoryClazz = loadClass(ModelEvaluatorFactory.class, modelEvaluatorBuilderConfig);
+		modelEvaluatorBuilder.setModelEvaluatorFactory(newInstance(modelEvaluatorFactoryClazz));
+
+		Class<? extends ValueFactoryFactory> valueFactoryFactoryClazz = loadClass(ValueFactoryFactory.class, modelEvaluatorBuilderConfig);
+		modelEvaluatorBuilder.setValueFactoryFactory(newInstance(valueFactoryFactoryClazz));
+
+		modelEvaluatorBuilder.setOutputFilter(OutputFilters.KEEP_FINAL_RESULTS);
+
+		// Jackson does not support the JSON serialization of <code>null</code> map keys
+		ResultMapper resultMapper = new ResultMapper(){
+
+			private FieldName defaultTargetName = FieldName.create(ModelResponse.DEFAULT_TARGET_NAME);
+
+
+			@Override
+			public FieldName apply(FieldName name){
+
+				// A "phantom" default target field
+				if(name == null){
+					return this.defaultTargetName;
+				}
+
+				return name;
+			}
+		};
+
+		modelEvaluatorBuilder.setResultMapper(resultMapper);
+
+		boolean validate = modelEvaluatorBuilderConfig.getBoolean("validate");
+
+		if(validate){
+			Schema schema;
+
+			try {
+				schema = JAXBUtil.getSchema();
+			} catch(SAXException | IOException e){
+				throw new RuntimeException(e);
+			}
+
+			modelEvaluatorBuilder
+				.setSchema(schema)
+				.setValidationEventHandler(new SimpleValidationEventHandler());
+		}
+
+		boolean locatable = modelEvaluatorBuilderConfig.getBoolean("locatable");
+
+		modelEvaluatorBuilder.setLocatable(locatable);
+
+		VisitorBattery visitors = new VisitorBattery();
+
+		List<String> visitorClassNames = modelEvaluatorBuilderConfig.getStringList("visitorClasses");
+		for(String visitorClassName : visitorClassNames){
+			Class<?> clazz = loadClass(Object.class, visitorClassName);
+
+			if((Visitor.class).isAssignableFrom(clazz)){
+				Class<? extends Visitor> visitorClazz = clazz.asSubclass(Visitor.class);
+
+				visitors.add(visitorClazz);
+			} else
+
+			if((VisitorBattery.class).isAssignableFrom(clazz)){
+				Class<? extends VisitorBattery> visitorBatteryClazz = clazz.asSubclass(VisitorBattery.class);
+
+				VisitorBattery visitorBattery = newInstance(visitorBatteryClazz);
+
+				visitors.addAll(visitorBattery);
+			} else
+
+			{
+				throw new IllegalArgumentException(new ClassCastException(clazz.toString()));
+			}
+		}
+
+		modelEvaluatorBuilder.setVisitors(visitors);
+
+		return modelEvaluatorBuilder;
+	}
+
+	static
+	protected <E> Class<? extends E> loadClass(Class<? extends E> superClazz, Config config){
+		String path = superClazz.getSimpleName();
+
+		if(path.length() > 0){
+			path = path.substring(0, 1).toLowerCase() + path.substring(1);
+		}
+
+		path += "Class";
+
+		return loadClass(superClazz, config.getString(path));
+	}
+
+	static
+	protected <E> Class<? extends E> loadClass(Class<? extends E> superClazz, String name){
+
+		try {
+			Class<?> clazz = Class.forName(name);
+
+			return clazz.asSubclass(superClazz);
+		} catch(ClassCastException cce){
+			throw new IllegalArgumentException(cce);
+		} catch(ClassNotFoundException cnfe){
+			throw new IllegalArgumentException(cnfe);
+		}
+	}
+
+	static
+	protected <E> E newInstance(Class<? extends E> clazz){
+
+		try {
+			try {
+				Method method = clazz.getDeclaredMethod("newInstance");
+
+				Object result = method.invoke(null);
+
+				return clazz.cast(result);
+			} catch(NoSuchMethodException nsme){
+				return clazz.newInstance();
+			}
+		} catch(ReflectiveOperationException roe){
+			throw new IllegalArgumentException(roe);
+		}
+	}
+
+	static
+	private class SimpleValidationEventHandler implements ValidationEventHandler {
+
+		@Override
+		public boolean handleEvent(ValidationEvent event){
+			int severity = event.getSeverity();
+
+			switch(severity){
+				case ValidationEvent.ERROR:
+				case ValidationEvent.FATAL_ERROR:
+					return false;
+				default:
+					return true;
+			}
 		}
 	}
 }

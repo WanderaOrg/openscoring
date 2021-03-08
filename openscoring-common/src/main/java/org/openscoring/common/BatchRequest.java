@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Villu Ruusmann
+ * Copyright (c) 2019 Villu Ruusmann
  *
  * This file is part of Openscoring
  *
@@ -18,25 +18,23 @@
  */
 package org.openscoring.common;
 
-import com.google.common.annotations.GwtIncompatible;
-import com.google.gwt.core.ext.typeinfo.JType;
-import com.google.gwt.core.ext.typeinfo.TypeOracle;
-import org.dmg.pmml.DataType;
-import org.fusesource.restygwt.rebind.JsonEncoderDecoderClassCreator;
-import org.fusesource.restygwt.rebind.RestyJsonSerializerGenerator;
+import java.util.List;
 
-@GwtIncompatible (
-	value = "DataTypeRestySerializerGenerator"
-)
-public class DataTypeRestySerializerGenerator implements RestyJsonSerializerGenerator {
+public interface BatchRequest<E extends SimpleRequest> {
 
-	@Override
-	public Class<? extends JsonEncoderDecoderClassCreator> getGeneratorClass(){
-		return EnumSerializerGenerator.class;
+	List<E> getRequests();
+
+	default
+	int getSize(){
+		List<E> requests = getRequests();
+
+		return requests.size();
 	}
 
-	@Override
-	public JType getType(TypeOracle typeOracle){
-		return typeOracle.findType(DataType.class.getName());
+	default
+	E getRequest(int index){
+		List<E> requests = getRequests();
+
+		return requests.get(index);
 	}
 }

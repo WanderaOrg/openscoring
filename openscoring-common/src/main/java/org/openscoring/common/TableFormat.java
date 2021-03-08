@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Villu Ruusmann
+ * Copyright (c) 2019 Villu Ruusmann
  *
  * This file is part of Openscoring
  *
@@ -20,45 +20,56 @@ package org.openscoring.common;
 
 import java.io.Serializable;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import org.jpmml.model.ToStringHelper;
 
-@JsonInclude (
-	value = JsonInclude.Include.NON_EMPTY
-)
-public class SimpleResponse implements Serializable {
+public class TableFormat implements Serializable {
 
-	private String message = null;
+	private String charset = null;
 
+	private char delimiterChar;
+
+	private char quoteChar;
+
+
+	public TableFormat(){
+	}
 
 	@Override
 	public String toString(){
-		String message = getMessage();
-
-		ToStringHelper helper;
-
-		if(message != null){
-			helper = new ToStringHelper(this)
-				.add("message", message);
-		} else
-
-		{
-			helper = toStringHelper();
-		}
+		ToStringHelper helper = new ToStringHelper(this)
+			.add("charset", getCharset())
+			.add("delimiterChar", getDelimiterChar())
+			.add("quoteChar", getQuoteChar());
 
 		return helper.toString();
 	}
 
-	protected ToStringHelper toStringHelper(){
-		return new ToStringHelper(this);
+	public String getCharset(){
+		return this.charset;
 	}
 
-	public String getMessage(){
-		return this.message;
+	public TableFormat setCharset(String charset){
+		this.charset = charset;
+
+		return this;
 	}
 
-	public SimpleResponse setMessage(String message){
-		this.message = message;
+	public char getDelimiterChar(){
+		return this.delimiterChar;
+	}
+
+	public TableFormat setDelimiterChar(char delimiterChar){
+		this.delimiterChar = delimiterChar;
+
+		return this;
+	}
+
+	public char getQuoteChar(){
+		return this.quoteChar;
+	}
+
+	public TableFormat setQuoteChar(char quoteChar){
+		this.quoteChar = quoteChar;
 
 		return this;
 	}

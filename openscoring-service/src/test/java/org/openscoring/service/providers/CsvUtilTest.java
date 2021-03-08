@@ -16,24 +16,34 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with Openscoring.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.openscoring.common;
+package org.openscoring.service.providers;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.StringReader;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
-import com.google.common.annotations.GwtIncompatible;
-import org.dmg.pmml.OpType;
+import org.junit.Test;
+import org.openscoring.service.providers.CsvUtil;
+import org.supercsv.prefs.CsvPreference;
 
-@GwtIncompatible (
-	value = "OpTypeSerializer"
-)
-public class OpTypeSerializer extends JsonSerializer<OpType> {
+import static org.junit.Assert.assertNotSame;
 
-	@Override
-	public void serialize(OpType opType, JsonGenerator generator, SerializerProvider provider) throws IOException, JsonProcessingException {
-		generator.writeString(opType.value());
+public class CsvUtilTest {
+
+	@Test
+	public void getFormat() throws IOException {
+		CsvPreference first;
+		CsvPreference second;
+
+		String csv = "1\tone\n" +
+			"2\ttwo\n" +
+			"3\tthree";
+
+		try(BufferedReader reader = new BufferedReader(new StringReader(csv))){
+			first = CsvUtil.getFormat(reader);
+			second = CsvUtil.getFormat(reader);
+		}
+
+		assertNotSame(first.getEncoder(), second.getEncoder());
 	}
 }

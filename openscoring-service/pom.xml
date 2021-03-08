@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.openscoring</groupId>
 		<artifactId>openscoring</artifactId>
-		<version>1.3-WND-3-SNAPSHOT</version>
+		<version>2.0.4-WND-1-SNAPSHOT</version>
 	</parent>
 
 	<groupId>org.openscoring</groupId>
@@ -29,17 +29,18 @@
 		</dependency>
 
 		<dependency>
-			<groupId>com.codahale.metrics</groupId>
-			<artifactId>metrics-core</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>com.codahale.metrics</groupId>
-			<artifactId>metrics-json</artifactId>
+			<groupId>com.fasterxml.jackson.jaxrs</groupId>
+			<artifactId>jackson-jaxrs-json-provider</artifactId>
 		</dependency>
 
 		<dependency>
 			<groupId>com.typesafe</groupId>
 			<artifactId>config</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>javax.servlet</groupId>
+			<artifactId>javax.servlet-api</artifactId>
 		</dependency>
 
 		<dependency>
@@ -50,6 +51,10 @@
 		<dependency>
 			<groupId>org.glassfish.jersey.core</groupId>
 			<artifactId>jersey-server</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.glassfish.jersey.inject</groupId>
+			<artifactId>jersey-hk2</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.glassfish.jersey.media</groupId>
@@ -64,13 +69,11 @@
 			<groupId>org.jpmml</groupId>
 			<artifactId>pmml-evaluator-extension</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>org.jpmml</groupId>
+			<artifactId>pmml-evaluator-reporting</artifactId>
+		</dependency>
 
-		<!--
-		Java 7 and newer include a JAXB runtime.
-		The purpose of the following two dependencies is to make it possible to 
-		override the default JAXB runtime either with GlassFish Metro or EclipseLink MOXy runtime.
-		They may be safely excluded if this kind of flexibility is not needed.
-		-->
 		<dependency>
 			<groupId>org.jpmml</groupId>
 			<artifactId>pmml-model-metro</artifactId>
@@ -86,11 +89,6 @@
 		</dependency>
 
 		<dependency>
-			<groupId>javax.servlet</groupId>
-			<artifactId>servlet-api</artifactId>
-		</dependency>
-
-		<dependency>
 			<groupId>junit</groupId>
 			<artifactId>junit</artifactId>
 		</dependency>
@@ -101,7 +99,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.glassfish.jersey.test-framework.providers</groupId>
-			<artifactId>jersey-test-framework-provider-inmemory</artifactId>
+			<artifactId>jersey-test-framework-provider-jdk-http</artifactId>
 		</dependency>
 
 		<dependency>
@@ -115,6 +113,19 @@
 		<plugins>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>3.2.0</version>
+				<configuration>
+					<archive>
+						<manifestEntries>
+							<Specification-Title>${service.name}</Specification-Title>
+							<Specification-Version>${service.version}</Specification-Version>
+						</manifestEntries>
+					</archive>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
 					<argLine>${jacoco.agent}</argLine>
@@ -123,25 +134,17 @@
 							<name>java.util.logging.config.file</name>
 							<value>src/test/resources/logging.properties</value>
 						</property>
+						<property>
+							<name>config.file</name>
+							<value>src/test/resources/application.conf</value>
+						</property>
 					</systemProperties>
 				</configuration>
 			</plugin>
 			<plugin>
-				<groupId>org.glassfish.hk2</groupId>
-				<artifactId>hk2-inhabitant-generator</artifactId>
-				<version>2.4.0-b34</version>
-				<executions>
-					<execution>
-						<goals>
-							<goal>generate-inhabitants</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>0.7.6.201602180812</version>
+				<version>0.8.6</version>
 				<executions>
 					<execution>
 						<id>pre-unit-test</id>

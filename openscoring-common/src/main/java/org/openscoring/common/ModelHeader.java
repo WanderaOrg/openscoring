@@ -6,10 +6,9 @@ import java.util.Objects;
 import org.dmg.pmml.Application;
 import org.dmg.pmml.Header;
 import org.dmg.pmml.Timestamp;
+import org.glassfish.jersey.internal.guava.MoreObjects;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 
 @JsonInclude(value = JsonInclude.Include.NON_EMPTY)
 public class ModelHeader extends SimpleResponse {
@@ -117,7 +116,7 @@ public class ModelHeader extends SimpleResponse {
 			return super.toString();
 		}
 
-		ToStringHelper stringHelper = MoreObjects.toStringHelper(getClass()).add("copyright", getCopyright())
+		MoreObjects.ToStringHelper stringHelper = MoreObjects.toStringHelper(getClass()).add("copyright", getCopyright())
 				.add("description", getDescription()).add("modelVersion", getModelVersion())
 				.add("applicationName", getApplicationName()).add("applicationVersion", getApplicationVersion())
 				.add("timestamp", getTimestamp());

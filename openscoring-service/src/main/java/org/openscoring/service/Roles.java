@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Villu Ruusmann
+ * Copyright (c) 2020 Villu Ruusmann
  *
  * This file is part of Openscoring
  *
@@ -16,22 +16,17 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with Openscoring.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.openscoring.common;
+package org.openscoring.service;
 
-import java.io.Serializable;
+public interface Roles {
 
-import org.jpmml.model.ToStringHelper;
+	/**
+	 * A role with read-only access.
+	 */
+	String USER = "user";
 
-public class SimpleRequest implements Serializable {
-
-	@Override
-	public String toString(){
-		ToStringHelper helper = toStringHelper();
-
-		return helper.toString();
-	}
-
-	protected ToStringHelper toStringHelper(){
-		return new ToStringHelper(this);
-	}
+	/**
+	 * A role with read and write access.
+	 */
+	String ADMIN = "admin";
 }

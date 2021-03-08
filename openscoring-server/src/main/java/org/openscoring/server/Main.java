@@ -24,31 +24,45 @@ import java.net.InetSocketAddress;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
+import org.eclipse.jetty.annotations.AnnotationConfiguration;
+import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
+import org.eclipse.jetty.webapp.Configuration;
+import org.eclipse.jetty.webapp.JettyWebXmlConfiguration;
 import org.eclipse.jetty.webapp.WebAppContext;
 import org.glassfish.jersey.servlet.ServletContainer;
-import org.openscoring.client.DirectoryDeployer;
 import org.openscoring.service.Openscoring;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class Main {
 
 	@Parameter (
+		names = {"--application-class", "--application"},
+		description = "Application class name"
+	)
+	private String applicationClazz = Openscoring.class.getName();
+
+	@Parameter (
+		names = {"--application-path"},
+		description = "Application context path"
+	)
+	private String applicationPath = "/openscoring";
+
+	@Parameter (
 		names = {"--console-war"},
-		description = "Console web application (WAR) file or directory",
+		description = "Web administration console WAR file or directory",
 		hidden = true
 	)
 	private File consoleWar = null;
 
 	@Parameter (
-		names = {"--context-path"},
-		description = "Context path"
+		names = {"--console-path"},
+		description = "Web administration console context path",
+		hidden = true
 	)
-	private String contextPath = "/openscoring";
+	private String consolePath = "/console";
 
 	@Parameter (
 		names = {"--help"},
@@ -62,13 +76,6 @@ public class Main {
 		description = "Server host name or ip address"
 	)
 	private String host = null;
-
-	@Parameter (
-		names = {"--model-dir"},
-		description = "PMML model auto-deployment directory",
-		hidden = true
-	)
-	private File modelDir = null;
 
 	@Parameter (
 		names = {"--port"},
@@ -131,54 +138,23 @@ public class Main {
 		Server server = createServer(address);
 
 		server.start();
-
-		if(this.modelDir != null){
-			final
-			DirectoryDeployer deployer = new DirectoryDeployer();
-			deployer.setDir(this.modelDir);
-			deployer.setModelCollection(("http://" + address.getHostString() + ":" + String.valueOf(address.getPort())) + this.contextPath + "/model"); // XXX
-
-			Thread deployerThread = new Thread(){
-
-				@Override
-				public void run(){
-
-					try {
-						deployer.run();
-					} catch(Exception e){
-						Main.logger.error("Model auto-deployment interrupted", e);
-					}
-				}
-			};
-
-			deployerThread.start();
-		}
-
 		server.join();
 	}
 
-	private Server createServer(InetSocketAddress address){
+	private Server createServer(InetSocketAddress address) throws Exception {
 		Server server = new Server(address);
 
-		Openscoring application = new Openscoring();
-
-		ServletContainer jerseyServlet = new ServletContainer(application);
-
-		ServletContextHandler servletHandler = new ServletContextHandler();
-		servletHandler.setContextPath(this.contextPath);
-
-		servletHandler.addServlet(new ServletHolder(jerseyServlet), "/*");
+		Configuration.ClassList classList = Configuration.ClassList.setServerDefault(server);
+		classList.addBefore(JettyWebXmlConfiguration.class.getName(), AnnotationConfiguration.class.getName());
 
 		ContextHandlerCollection handlerCollection = new ContextHandlerCollection();
 
-		handlerCollection.addHandler(servletHandler);
+		Handler applicationHandler = createApplicationHandler();
+		handlerCollection.addHandler(applicationHandler);
 
-		if(this.consoleWar != null){
-			WebAppContext consoleHandler = new WebAppContext();
-			consoleHandler.setContextPath(this.contextPath + "/console"); // XXX
-			consoleHandler.setWar(this.consoleWar.getAbsolutePath());
-
-			handlerCollection.addHandler(consoleHandler);
+		Handler adminConsoleHandler = createAdminConsoleHandler();
+		if(adminConsoleHandler != null){
+			handlerCollection.addHandler(adminConsoleHandler);
 		}
 
 		server.setHandler(handlerCollection);
@@ -186,5 +162,31 @@ public class Main {
 		return server;
 	}
 
-	private static final Logger logger = LoggerFactory.getLogger(Main.class);
+	private Handler createApplicationHandler() throws Exception {
+		Class<?> applicationClazz = Class.forName(this.applicationClazz);
+
+		Class<? extends Openscoring> openscoringClazz = (applicationClazz).asSubclass(Openscoring.class);
+
+		Openscoring application = openscoringClazz.newInstance();
+
+		ServletContainer jerseyServlet = new ServletContainer(application);
+
+		ServletHolder servletHolder = new ServletHolder(jerseyServlet);
+
+		ServletContextHandler servletHandler = new ServletContextHandler(null, this.applicationPath);
+		servletHandler.addServlet(servletHolder, "/*");
+
+		return servletHandler;
+	}
+
+	private Handler createAdminConsoleHandler() throws Exception {
+
+		if(this.consoleWar != null){
+			WebAppContext webappHandler = new WebAppContext(null, this.consoleWar.getAbsolutePath(), this.consolePath);
+
+			return webappHandler;
+		}
+
+		return null;
+	}
 }

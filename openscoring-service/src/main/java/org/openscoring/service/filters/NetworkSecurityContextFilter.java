@@ -16,12 +16,13 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with Openscoring.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.openscoring.service;
+package org.openscoring.service.filters;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.security.Principal;
+import java.util.Collections;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 import javax.annotation.Priority;
@@ -38,6 +39,7 @@ import javax.ws.rs.ext.Provider;
 
 import com.google.common.collect.ImmutableSet;
 import com.typesafe.config.Config;
+import org.openscoring.service.Roles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,35 +51,102 @@ import org.slf4j.LoggerFactory;
 public class NetworkSecurityContextFilter implements ContainerRequestFilter {
 
 	@Context
-	private HttpServletRequest request;
+	private HttpServletRequest request = null;
 
-	private Set<String> trustedAddresses = NetworkSecurityContextFilter.localAddresses;
+	private Set<String> userAddresses = Collections.emptySet();
+
+	private Set<String> adminAddresses = Collections.emptySet();
 
 
 	@Inject
 	public NetworkSecurityContextFilter(@Named("openscoring") Config config){
-		Config networkConfig = config.getConfig("networkSecurityContextFilter");
+		Config filterConfig = config.getConfig("networkSecurityContextFilter");
 
-		List<String> trustedAddresses = networkConfig.getStringList("trustedAddresses");
-		if(trustedAddresses.size() > 0){
-			this.trustedAddresses = ImmutableSet.copyOf(trustedAddresses);
-		}
+		this.userAddresses = prepareAddresses(filterConfig, "userAddresses");
+		this.adminAddresses = prepareAddresses(filterConfig, "adminAddresses");
+
+		logger.info("User network addresses: {}", this.userAddresses);
+		logger.info("Admin network addresses: {}", this.adminAddresses);
 	}
 
 	@Override
-	public void filter(ContainerRequestContext context){
-		SecurityContext securityContext = new NetworkSecurityContext(this.request){
+	public void filter(ContainerRequestContext requestContext){
+		HttpServletRequest request = getRequest();
 
-			private Set<String> trustedAddresses = NetworkSecurityContextFilter.this.trustedAddresses;
+		SecurityContext requestSecurityContext = requestContext.getSecurityContext();
 
+		SecurityContext securityContext = new SecurityContext(){
 
 			@Override
-			public boolean isTrusted(String address){
-				return ("(in-memory)").equals(address) || (this.trustedAddresses).contains(address);
+			public Principal getUserPrincipal(){
+				return Anonymous.INSTANCE;
+			}
+
+			@Override
+			public boolean isUserInRole(String role){
+				String address = getAddress();
+
+				Set<String> roleAddresses;
+
+				switch(role){
+					case Roles.USER:
+						roleAddresses = getUserAddresses();
+						break;
+					case Roles.ADMIN:
+						roleAddresses = getAdminAddresses();
+						break;
+					default:
+						return false;
+				}
+
+				return (roleAddresses).contains(address) || (roleAddresses).contains("*");
+			}
+
+			@Override
+			public boolean isSecure(){
+				return requestSecurityContext != null && requestSecurityContext.isSecure();
+			}
+
+			@Override
+			public String getAuthenticationScheme(){
+				return "REMOTE_ADDR";
+			}
+
+			private String getAddress(){
+
+				if(request == null){
+					return null;
+				}
+
+				return request.getRemoteAddr();
 			}
 		};
 
-		context.setSecurityContext(securityContext);
+		requestContext.setSecurityContext(securityContext);
+	}
+
+	private HttpServletRequest getRequest(){
+		return this.request;
+	}
+
+	private Set<String> getUserAddresses(){
+		return this.userAddresses;
+	}
+
+	private Set<String> getAdminAddresses(){
+		return this.adminAddresses;
+	}
+
+	static
+	private Set<String> prepareAddresses(Config config, String path){
+		Set<String> result = new LinkedHashSet<>();
+		result.addAll(config.getStringList(path));
+
+		if(result.remove("localhost")){
+			result.addAll(NetworkSecurityContextFilter.localAddresses);
+		}
+
+		return ImmutableSet.copyOf(result);
 	}
 
 	static
