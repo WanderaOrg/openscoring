@@ -6,7 +6,7 @@ import java.util.Objects;
 import org.dmg.pmml.Application;
 import org.dmg.pmml.Header;
 import org.dmg.pmml.Timestamp;
-import org.glassfish.jersey.internal.guava.MoreObjects;
+import org.jpmml.model.ToStringHelper;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -116,7 +116,7 @@ public class ModelHeader extends SimpleResponse {
 			return super.toString();
 		}
 
-		MoreObjects.ToStringHelper stringHelper = MoreObjects.toStringHelper(getClass()).add("copyright", getCopyright())
+		ToStringHelper stringHelper = toStringHelper().add("copyright", getCopyright())
 				.add("description", getDescription()).add("modelVersion", getModelVersion())
 				.add("applicationName", getApplicationName()).add("applicationVersion", getApplicationVersion())
 				.add("timestamp", getTimestamp());
